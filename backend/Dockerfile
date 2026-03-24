@@ -24,8 +24,8 @@ COPY package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
-# Create uploads directory and set permissions
-RUN mkdir -p uploads && chown -R node:node uploads
+# Create uploads and data directories and set permissions
+RUN mkdir -p uploads data && chown -R node:node uploads data
 RUN chown -R node:node /app
 
 USER node
