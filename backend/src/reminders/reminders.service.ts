@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Reminder } from './reminder.entity';
@@ -117,7 +118,7 @@ export class RemindersService {
     }
 
     // Check reminders every minute
-    // @Cron(CronExpression.EVERY_MINUTE) // Uncomment to enable auto-scheduling
+    @Cron(CronExpression.EVERY_MINUTE)
     async checkAndSendReminders() {
         const now = new Date();
         const currentTime = now.toTimeString().substring(0, 5); // "HH:MM"
