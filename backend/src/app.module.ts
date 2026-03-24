@@ -26,7 +26,7 @@ import { Doctor } from './doctors/doctor.entity';
     ScheduleModule.forRoot(),
     TypeOrmModule.forRoot({
       type: 'better-sqlite3',
-      database: join(__dirname, '..', 'database.sqlite'),
+      database: process.env.DATABASE_PATH || join(__dirname, '..', 'database.sqlite'),
       entities: [User, Prescription, Medicine, Reminder, Doctor],
       synchronize: true,
     }),
