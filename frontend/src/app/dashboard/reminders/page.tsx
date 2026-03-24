@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import PhoneInput from 'react-phone-input-2';
+import 'react-phone-input-2/lib/style.css';
 import { api } from '@/lib/api';
 import {
     Bell,
@@ -39,6 +41,7 @@ interface ReminderDraft {
     dose: string;
     time: string;
     phone: string;
+    countryCode: string;
     frequency: string;
     duration: string;
 }
@@ -74,6 +77,7 @@ const NEW_REMINDER_DEFAULT: ReminderDraft = {
     dose: '',
     time: '08:00',
     phone: '',
+    countryCode: 'in',
     frequency: 'Once daily',
     duration: '7 days',
 };
@@ -232,6 +236,7 @@ export default function RemindersPage() {
     const [search, setSearch] = useState('');
     const [newReminder, setNewReminder] = useState<ReminderDraft>(NEW_REMINDER_DEFAULT);
     const [apiDrugMeter, setApiDrugMeter] = useState<ApiDrugMeterResult | null>(null);
+    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
     useEffect(() => {
         api.getReminders()
@@ -312,16 +317,50 @@ export default function RemindersPage() {
         };
     }, [activeMedicineNames]);
 
-    const handleAdd = async () => {
-        if (!newReminder.medicineName.trim() || !newReminder.phone.trim()) {
-            alert('Medicine name and phone are required.');
-            return;
+    const validateForm = (): boolean => {
+        const errors: Record<string, string> = {};
+
+        if (!newReminder.medicineName.trim()) {
+            errors.medicineName = 'Medicine name is required';
+        } else if (newReminder.medicineName.trim().length < 2) {
+            errors.medicineName = 'Medicine name must be at least 2 characters';
         }
+
+        if (!newReminder.phone || newReminder.phone.length < 4) {
+            errors.phone = 'Phone number is required';
+        } else {
+            const digitsOnly = newReminder.phone.replace(/\D/g, '');
+            if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+                errors.phone = 'Enter a valid phone number (10-15 digits)';
+            }
+        }
+
+        if (!newReminder.time.trim()) {
+            errors.time = 'Reminder time is required';
+        }
+
+        setValidationErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
+    const clearFieldError = (field: string) => {
+        if (validationErrors[field]) {
+            setValidationErrors((prev) => {
+                const next = { ...prev };
+                delete next[field];
+                return next;
+            });
+        }
+    };
+
+    const handleAdd = async () => {
+        if (!validateForm()) return;
         try {
             const created = await api.createReminder(newReminder);
             setReminders((prev) => [...prev, created as Reminder]);
             setShowAdd(false);
             setNewReminder(NEW_REMINDER_DEFAULT);
+            setValidationErrors({});
         } catch (err: unknown) {
             alert(getErrorMessage(err, 'Failed to create reminder'));
         }
@@ -389,7 +428,10 @@ export default function RemindersPage() {
                     <p className="text-slate-500 mt-1">Organized reminders with safety meter</p>
                 </div>
                 <button
-                    onClick={() => setShowAdd((prev) => !prev)}
+                    onClick={() => {
+                        setShowAdd((prev) => !prev);
+                        setValidationErrors({});
+                    }}
                     className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-sm font-medium transition-all shadow-[0_0_10px_rgba(249,115,22,0.4)]"
                 >
                     <Plus size={16} /> Add Reminder
@@ -489,15 +531,33 @@ export default function RemindersPage() {
             {showAdd && (
                 <div className="bg-orange-950/20 border border-orange-700/50 rounded-xl p-6 animate-scale-in">
                     <h3 className="text-sm font-mono text-orange-400 uppercase tracking-widest mb-4">New Reminder</h3>
+
+                    {Object.keys(validationErrors).length > 0 && (
+                        <div className="mb-4 flex items-start gap-2 bg-red-950/40 border border-red-700/50 rounded-lg px-4 py-3 animate-[shake_0.3s_ease-in-out]">
+                            <WarningCircle size={18} className="text-red-400 mt-0.5 shrink-0" />
+                            <p className="text-red-300 text-sm">
+                                Please fix the highlighted fields below before creating the reminder.
+                            </p>
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                            <label className="text-slate-500 text-xs font-mono block mb-1">Medicine Name</label>
+                            <label className="text-slate-500 text-xs font-mono block mb-1">Medicine Name <span className="text-red-400">*</span></label>
                             <input
                                 value={newReminder.medicineName}
-                                onChange={(e) => setNewReminder((p) => ({ ...p, medicineName: e.target.value }))}
-                                className="input-modern"
+                                onChange={(e) => {
+                                    setNewReminder((p) => ({ ...p, medicineName: e.target.value }));
+                                    clearFieldError('medicineName');
+                                }}
+                                className={`input-modern ${validationErrors.medicineName ? 'border-red-500/70 ring-1 ring-red-500/30' : ''}`}
                                 placeholder="Paracetamol"
                             />
+                            {validationErrors.medicineName && (
+                                <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                                    <WarningCircle size={12} /> {validationErrors.medicineName}
+                                </p>
+                            )}
                         </div>
                         <div>
                             <label className="text-slate-500 text-xs font-mono block mb-1">Dose</label>
@@ -509,22 +569,79 @@ export default function RemindersPage() {
                             />
                         </div>
                         <div>
-                            <label className="text-slate-500 text-xs font-mono block mb-1">Phone Number</label>
-                            <input
+                            <label className="text-slate-500 text-xs font-mono block mb-1">Phone Number <span className="text-red-400">*</span></label>
+                            <PhoneInput
+                                country={newReminder.countryCode}
                                 value={newReminder.phone}
-                                onChange={(e) => setNewReminder((p) => ({ ...p, phone: e.target.value }))}
-                                className="input-modern"
-                                placeholder="+91 98765 43210"
+                                onChange={(value, data: { countryCode?: string }) => {
+                                    setNewReminder((p) => ({
+                                        ...p,
+                                        phone: '+' + value,
+                                        countryCode: data?.countryCode || p.countryCode,
+                                    }));
+                                    clearFieldError('phone');
+                                }}
+                                enableSearch
+                                searchPlaceholder="Search country..."
+                                inputProps={{ id: 'phone-input' }}
+                                containerClass="phone-input-container"
+                                inputClass="phone-input-field"
+                                buttonClass="phone-input-button"
+                                dropdownClass="phone-input-dropdown"
+                                searchClass="phone-input-search"
+                                containerStyle={{
+                                    width: '100%',
+                                }}
+                                inputStyle={{
+                                    width: '100%',
+                                    height: '42px',
+                                    backgroundColor: 'rgb(15 23 42 / 0.6)',
+                                    border: validationErrors.phone ? '1px solid rgb(239 68 68 / 0.7)' : '1px solid rgb(51 65 85 / 0.6)',
+                                    borderRadius: '0.75rem',
+                                    color: '#e2e8f0',
+                                    fontSize: '0.875rem',
+                                    paddingLeft: '52px',
+                                }}
+                                buttonStyle={{
+                                    backgroundColor: 'rgb(30 41 59 / 0.8)',
+                                    border: validationErrors.phone ? '1px solid rgb(239 68 68 / 0.7)' : '1px solid rgb(51 65 85 / 0.6)',
+                                    borderRadius: '0.75rem 0 0 0.75rem',
+                                }}
+                                dropdownStyle={{
+                                    backgroundColor: 'rgb(15 23 42)',
+                                    border: '1px solid rgb(51 65 85)',
+                                    borderRadius: '0.75rem',
+                                    color: '#e2e8f0',
+                                }}
+                                searchStyle={{
+                                    backgroundColor: 'rgb(30 41 59)',
+                                    color: '#e2e8f0',
+                                    border: '1px solid rgb(51 65 85)',
+                                    borderRadius: '0.5rem',
+                                }}
                             />
+                            {validationErrors.phone && (
+                                <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                                    <WarningCircle size={12} /> {validationErrors.phone}
+                                </p>
+                            )}
                         </div>
                         <div>
-                            <label className="text-slate-500 text-xs font-mono block mb-1">Time</label>
+                            <label className="text-slate-500 text-xs font-mono block mb-1">Time <span className="text-red-400">*</span></label>
                             <input
                                 type="time"
                                 value={newReminder.time}
-                                onChange={(e) => setNewReminder((p) => ({ ...p, time: e.target.value }))}
-                                className="input-modern"
+                                onChange={(e) => {
+                                    setNewReminder((p) => ({ ...p, time: e.target.value }));
+                                    clearFieldError('time');
+                                }}
+                                className={`input-modern ${validationErrors.time ? 'border-red-500/70 ring-1 ring-red-500/30' : ''}`}
                             />
+                            {validationErrors.time && (
+                                <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                                    <WarningCircle size={12} /> {validationErrors.time}
+                                </p>
+                            )}
                         </div>
                         <div>
                             <label className="text-slate-500 text-xs font-mono block mb-1">Frequency</label>
@@ -551,7 +668,7 @@ export default function RemindersPage() {
                     </div>
                     <div className="flex gap-3 mt-4">
                         <button onClick={handleAdd} className="btn-success">Create Reminder</button>
-                        <button onClick={() => setShowAdd(false)} className="btn-secondary">Cancel</button>
+                        <button onClick={() => { setShowAdd(false); setValidationErrors({}); }} className="btn-secondary">Cancel</button>
                     </div>
                 </div>
             )}
